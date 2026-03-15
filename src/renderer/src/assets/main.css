@@ -1,0 +1,16 @@
+@import './base.css';
+@import './pdf-viewer.css';
+
+body {
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
