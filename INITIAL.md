@@ -7,19 +7,17 @@ Then say **"Generate a PRP for {feature-name}"** in Kilo Code.
 
 ## FEATURE NAME
 
-`app-shell`
+`text-insert`
 
 ---
 
 ## WHAT THE USER CAN DO
 
-The user sees a consistent application frame around the PDF viewer:
-- A top toolbar with grouped sections: file actions (Open), navigation controls, zoom controls, and a right-side area reserved for future editing tools
-- A left sidebar that can host multiple panels (currently Bookmarks) with tab icons to switch between them
-- An undo/redo history system (Ctrl+Z / Ctrl+Y) that features can register commands into
-- A status bar at the bottom showing current file name and page info
-
-The AppShell is not a user-facing feature itself — it is the registration system that all future features (Insert Text, Signature, etc.) will plug into to add their toolbar buttons, sidebar panels, and commands.
+The user clicks a "Insert Text" button in the toolbar to activate text insertion mode.
+The cursor changes to a text cursor. The user clicks anywhere on the PDF page and a text
+input box appears at that position. The user types their text, chooses font, size, and color
+from the toolbar options. When they click elsewhere or press Escape, the text is permanently
+embedded into the PDF at that position. The user can undo the insertion with Ctrl+Z.
 
 ---
 
@@ -31,58 +29,64 @@ Y. Sasiwat — Lead Developer
 
 ## DOES IT INTERACT WITH THE PDF CANVAS?
 
-- [ ] No — it is a layout and registration framework, not a canvas interaction
+- [x] Yes — user clicks on the PDF canvas to place the text cursor, then types
 
 ---
 
 ## DOES IT MODIFY THE PDF DOCUMENT?
 
-- [ ] No — it manages app state and UI structure only
+- [x] Yes — embeds the typed text into the PDF using pdf-lib at the clicked position
 
 ---
 
 ## DOES IT NEED A SIDEBAR PANEL?
 
-- [x] Yes — a sidebar that hosts multiple panels via tab icons on the left edge (like VS Code). Currently hosts the Bookmarks panel. Future features will add their own panels here.
+- [ ] No
 
 ---
 
 ## DOES IT NEED A DIALOG?
 
-- [ ] No
+- [ ] No — font, size, and color options appear inline in the toolbar when text insertion mode is active
 
 ---
 
 ## ACCEPTANCE CRITERIA
 
-- AppShell renders a stable layout: toolbar (top) + sidebar (left, collapsible) + canvas area (center) + status bar (bottom)
-- Features can register toolbar buttons via `shell.addToolbarButton()`
-- Features can register sidebar panels via `shell.addPanel()`
-- Features can register commands (undo/redo) via `shell.executeCommand()`
-- Ctrl+Z undoes the last command, Ctrl+Y / Ctrl+Shift+Z redoes
-- Undo/redo buttons in toolbar reflect available history (disabled when nothing to undo/redo)
-- Bookmarks panel from pdf-viewer is migrated into the AppShell sidebar
-- Status bar shows current filename and "Page X / Y"
+- A "Insert Text" button appears in the toolbar
+- Clicking it activates text insertion canvas mode (cursor changes)
+- User clicks on the PDF page — a text input box appears at that exact position
+- User can type text and see it rendered live as an overlay on the canvas
+- Toolbar shows font family selector, font size input, and color picker while mode is active
+- Pressing Enter or clicking elsewhere confirms and embeds the text into the PDF via pdf-lib
+- Pressing Escape cancels without modifying the PDF
+- Undo (Ctrl+Z) removes the inserted text and restores the previous PDF state
+- Redo (Ctrl+Y) re-applies the insertion
+- Works correctly on both portrait and landscape pages
+- Unit tests cover: text placement, PDF write, undo/redo
 
 ---
 
 ## SIMILAR EXISTING FEATURE
 
-The existing pdf-viewer layout (toolbar + bookmarks panel + canvas) is the starting point — AppShell formalises and replaces it with a proper registration-based system.
+None yet — this is the first editing feature. Refer to `PRPs/examples/EXAMPLE_text_insert_prp.md` in the context kit for a reference implementation.
 
 ---
 
 ## EXTERNAL DOCS / APIS TO CONSULT
 
-- Zustand `history-store.ts` — command history stack
-- `src/renderer/src/core/AppShell.ts` — to be created
-- React Context for providing shell instance to all features
+- `pdf-lib` — `page.drawText()`, `PDFFont`, `rgb()` color helper
+- `pdfjs-dist` — viewport transform for converting DOM click coordinates to PDF page coordinates
+- AppShell — `shell.addToolbarButton()`, `shell.registerMode()`, `shell.executeCommand()`
+- CanvasMode interface — `onPointerDown`, `onPointerMove`, `onPointerUp`, `renderOverlay`
+- Command interface — `execute(doc)`, `undo(doc)`, `description`
 
 ---
 
 ## OTHER NOTES
 
-- AppShell must be created before any editing features (Insert Text, Signature, etc.) are built
-- Keep AppShell's own UI minimal — its job is registration and layout, not features
-- The Command interface: `{ execute(doc): void, undo(doc): void, description: string }`
-- History store should have a max stack size (e.g. 50 commands)
+- Text position must be converted from DOM/canvas coordinates (top-left origin, Y-down) to PDF coordinates (bottom-left origin, Y-up) — this conversion happens in CanvasManager, the mode receives PagePoint already converted
+- The command must snapshot the full PDF document bytes before embedding text so undo can restore the exact previous state
+- Use standard PDF fonts first (Helvetica, Times-Roman, Courier) to avoid font embedding complexity in v1
+- Font size default: 12pt
+- Color default: black

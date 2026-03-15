@@ -18,7 +18,7 @@ const err = <E = string>(error: E): Result<never, E> => ({ ok: false, error })
 export interface OpenPdfSuccess {
   filePath: string
   fileName: string
-  bytes: Uint8Array
+  bytes: number[]
 }
 
 const normalizeUnknownError = (error: unknown): string => {
@@ -59,7 +59,7 @@ export const handleFileOpen = async (
     return ok({
       filePath,
       fileName: basename(filePath),
-      bytes: new Uint8Array(bytes)
+      bytes: Array.from(bytes)
     })
   } catch (error: unknown) {
     return err(normalizeUnknownError(error))

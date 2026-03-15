@@ -13,20 +13,42 @@ type Result<T, E = string> = { ok: true; value: T } | { ok: false; error: E }
 interface OpenPdfSuccess {
   filePath: string
   fileName: string
+  bytes: number[]
+}
+
+interface OpenPdfSuccessRenderer {
+  filePath: string
+  fileName: string
   bytes: Uint8Array
 }
 
 interface FolioApi {
   file: {
-    open: () => Promise<Result<OpenPdfSuccess>>
+    open: () => Promise<Result<OpenPdfSuccessRenderer>>
+  }
+}
+
+const toRendererResult = (result: Result<OpenPdfSuccess>): Result<OpenPdfSuccessRenderer> => {
+  if (!result.ok) {
+    return result
+  }
+
+  return {
+    ok: true,
+    value: {
+      filePath: result.value.filePath,
+      fileName: result.value.fileName,
+      bytes: new Uint8Array(result.value.bytes)
+    }
   }
 }
 
 // Custom APIs for renderer
 const api: FolioApi = {
   file: {
-    open: async (): Promise<Result<OpenPdfSuccess>> => {
-      return ipcRenderer.invoke('file:open') as Promise<Result<OpenPdfSuccess>>
+    open: async (): Promise<Result<OpenPdfSuccessRenderer>> => {
+      const result = (await ipcRenderer.invoke('file:open')) as Result<OpenPdfSuccess>
+      return toRendererResult(result)
     }
   }
 }

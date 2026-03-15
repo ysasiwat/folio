@@ -27,6 +27,7 @@ export interface DocumentState {
   isLoading: boolean
   loadError: string | null
   openDocument: (doc: OpenPdfSuccess, pageCount: number) => void
+  updateBytes: (bytes: Uint8Array) => void
   setLoading: (isLoading: boolean) => void
   setLoadError: (message: string | null) => void
   closeDocument: () => void
@@ -70,6 +71,17 @@ export interface PdfTextMatchBox {
   y: number
   width: number
   height: number
+}
+
+export interface PdfPoint {
+  pageIndex: number
+  x: number
+  y: number
+}
+
+export interface PdfOverlayPoint extends PdfPoint {
+  overlayLeft: number
+  overlayTop: number
 }
 
 export interface PdfLoadInfo {

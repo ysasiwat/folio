@@ -18,12 +18,15 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "test": "vitest run",
+    "validate": "npm run lint && npm run typecheck && npm run test && electron-vite build"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "electron-updater": "^6.3.9",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "zustand": "^5.0.11"
   },
@@ -46,6 +49,7 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "typescript": "^5.9.3",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "vitest": "^2.1.9"
   }
 }

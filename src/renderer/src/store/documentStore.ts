@@ -31,6 +31,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       loadError: null
     })
   },
+  updateBytes: (bytes) => {
+    set({
+      bytes
+    })
+  },
   setLoading: (isLoading) => {
     set({ isLoading })
   },

@@ -5,17 +5,21 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { RefObject, WheelEvent } from 'react'
+import type { PointerEvent, RefObject, WheelEvent } from 'react'
+import { PdfDocument, type PdfDocumentApi } from '@renderer/core/PdfDocument'
 import { PdfRenderer } from '@renderer/core/PdfRenderer'
 import { useDocumentStore } from '@renderer/store/documentStore'
 import { useEditorStore } from '@renderer/store/editorStore'
 import {
   MAX_ZOOM,
   MIN_ZOOM,
+  type PdfOverlayPoint,
   type PdfOutlineItem,
   type PdfTextMatchBox,
   type ZoomLevel
 } from '@renderer/types/pdfViewer'
+import type { ViewerBindings } from '@renderer/types/appShell'
+import { err, ok, type Result } from '@renderer/types/result'
 
 const FILE_OPEN_CANCELLED = 'FILE_OPEN_CANCELLED'
 const VIEWPORT_PADDING = 24
@@ -44,7 +48,7 @@ const clampPageIndex = (pageIndex: number, pageCount: number): number => {
 
 const ensurePositive = (value: number): number => (value > 0 ? value : 1)
 
-export interface UsePdfViewerResult {
+export interface UsePdfViewerResult extends ViewerBindings {
   fileName: string | null
   hasDocument: boolean
   pageCount: number
@@ -54,6 +58,10 @@ export interface UsePdfViewerResult {
   loadError: string | null
   canvasContainerRef: RefObject<HTMLDivElement | null>
   viewportRef: RefObject<HTMLDivElement | null>
+  documentApi: PdfDocumentApi
+  applyDocumentBytes: (nextBytes: Uint8Array) => Promise<Result<void>>
+  resolveOverlayPoint: (event: PointerEvent<HTMLDivElement>) => PdfOverlayPoint | null
+  getPageSurfaceElement: (pageIndex: number) => HTMLElement | null
   openFile: () => Promise<void>
   zoomIn: () => void
   zoomOut: () => void
@@ -86,6 +94,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
   const rendererRef = useRef<PdfRenderer | null>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const pageSurfaceMapRef = useRef<Map<number, HTMLElement>>(new Map())
   const renderRunIdRef = useRef(0)
   const searchRunIdRef = useRef(0)
 
@@ -110,6 +119,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
   const isLoading = useDocumentStore((state) => state.isLoading)
   const loadError = useDocumentStore((state) => state.loadError)
   const openDocument = useDocumentStore((state) => state.openDocument)
+  const updateBytes = useDocumentStore((state) => state.updateBytes)
   const setLoading = useDocumentStore((state) => state.setLoading)
   const setLoadError = useDocumentStore((state) => state.setLoadError)
   const closeDocument = useDocumentStore((state) => state.closeDocument)
@@ -122,6 +132,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
   const zoomOut = useEditorStore((state) => state.zoomOut)
 
   const hasDocument = Boolean(bytes && pageCount > 0)
+  const documentApi = useMemo<PdfDocumentApi>(() => new PdfDocument(), [])
 
   const getRenderer = useCallback((): PdfRenderer => {
     if (!rendererRef.current) {
@@ -138,7 +149,95 @@ export const usePdfViewer = (): UsePdfViewerResult => {
     }
 
     container.innerHTML = ''
+    pageSurfaceMapRef.current.clear()
   }, [])
+
+  const getPageSurfaceElement = useCallback((pageIndex: number): HTMLElement | null => {
+    return pageSurfaceMapRef.current.get(pageIndex) ?? null
+  }, [])
+
+  const resolveOverlayPoint = useCallback(
+    (event: PointerEvent<HTMLDivElement>): PdfOverlayPoint | null => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) {
+        return null
+      }
+
+      const pageWrapper = target.closest<HTMLElement>('.pdf-page-wrapper')
+      if (!pageWrapper) {
+        return null
+      }
+
+      const pageIndex = Number(pageWrapper.dataset.pageIndex ?? '-1')
+      if (!Number.isFinite(pageIndex) || pageIndex < 0) {
+        return null
+      }
+
+      const pageSurface = pageWrapper.querySelector<HTMLElement>('.pdf-page-surface')
+      const canvas = pageWrapper.querySelector<HTMLCanvasElement>('.pdf-page-canvas')
+
+      if (!pageSurface || !canvas) {
+        return null
+      }
+
+      const canvasRect = canvas.getBoundingClientRect()
+      if (canvasRect.width <= 0 || canvasRect.height <= 0) {
+        return null
+      }
+
+      const domX = event.clientX - canvasRect.left
+      const domY = event.clientY - canvasRect.top
+
+      if (
+        !Number.isFinite(domX) ||
+        !Number.isFinite(domY) ||
+        domX < 0 ||
+        domY < 0 ||
+        domX > canvasRect.width ||
+        domY > canvasRect.height
+      ) {
+        return null
+      }
+
+      const safeScale = scale > 0 ? scale : 1
+      const pdfX = domX / safeScale
+      const pdfY = (canvasRect.height - domY) / safeScale
+
+      const surfaceRect = pageSurface.getBoundingClientRect()
+
+      return {
+        pageIndex,
+        x: pdfX,
+        y: pdfY,
+        overlayLeft: event.clientX - surfaceRect.left,
+        overlayTop: event.clientY - surfaceRect.top
+      }
+    },
+    [scale]
+  )
+
+  const applyDocumentBytes = useCallback(
+    async (nextBytes: Uint8Array): Promise<Result<void>> => {
+      const renderer = getRenderer()
+      const rendererLoadResult = await renderer.load(nextBytes)
+
+      if (!rendererLoadResult.ok) {
+        setLoadError(rendererLoadResult.error)
+        return err(rendererLoadResult.error)
+      }
+
+      const documentLoadResult = await documentApi.load(nextBytes)
+      if (!documentLoadResult.ok) {
+        setLoadError(documentLoadResult.error)
+        return err(documentLoadResult.error)
+      }
+
+      updateBytes(nextBytes)
+      setLoadError(null)
+      return ok(undefined)
+    },
+    [documentApi, getRenderer, setLoadError, updateBytes]
+  )
 
   const scrollToPageIndex = useCallback(
     (targetPageIndex: number, matchCenterY?: number): void => {
@@ -243,6 +342,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
 
       const pageSurface = document.createElement('div')
       pageSurface.className = 'pdf-page-surface'
+      pageSurface.dataset.pageIndex = String(pageIndex)
 
       const canvas = document.createElement('canvas')
       canvas.className = 'pdf-page-canvas'
@@ -254,6 +354,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       pageSurface.appendChild(highlightLayer)
       pageWrapper.appendChild(pageSurface)
       container.appendChild(pageWrapper)
+      pageSurfaceMapRef.current.set(pageIndex, pageSurface)
 
       const result = await renderer.renderPage({
         canvas,
@@ -371,6 +472,13 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       return
     }
 
+    const documentLoadResult = await documentApi.load(selection.value.bytes)
+    if (!documentLoadResult.ok) {
+      setLoading(false)
+      setLoadError(documentLoadResult.error)
+      return
+    }
+
     openDocument(selection.value, loadResult.value.pageCount)
 
     const outlineResult = await renderer.getOutline()
@@ -384,6 +492,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
   }, [
     clearRenderedPages,
     closeDocument,
+    documentApi,
     getRenderer,
     openDocument,
     resetViewportScroll,
@@ -617,6 +726,10 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       loadError,
       canvasContainerRef,
       viewportRef,
+      documentApi,
+      applyDocumentBytes,
+      resolveOverlayPoint,
+      getPageSurfaceElement,
       openFile,
       zoomIn,
       zoomOut,
@@ -653,9 +766,11 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       canZoomIn,
       canZoomOut,
       currentPage,
+      documentApi,
       fileName,
       fitPage,
       fitWidth,
+      getPageSurfaceElement,
       goToNextMatch,
       goToNextPage,
       goToPreviousMatch,
@@ -672,6 +787,8 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       openFile,
       outlineItems,
       pageCount,
+      applyDocumentBytes,
+      resolveOverlayPoint,
       scale,
       searchQuery,
       setSearchQuery,

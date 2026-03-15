@@ -1,0 +1,229 @@
+.app-shell-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #0f1218;
+  color: #e9edf7;
+}
+
+.app-shell-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #2f3748;
+  background: rgba(24, 29, 39, 0.92);
+  overflow: hidden;
+}
+
+.app-shell-toolbar-track {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.app-shell-toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.app-shell-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 4px;
+  margin-right: 0;
+  border-right: 1px solid #374055;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+}
+
+.app-shell-toolbar-group--primary,
+.app-shell-toolbar-group--text,
+.app-shell-toolbar-group--navigation,
+.app-shell-toolbar-group--zoom {
+  flex: 0 0 auto;
+}
+
+.app-shell-toolbar-group:last-child {
+  border-right: none;
+  margin-right: 0;
+  padding-right: 0;
+}
+
+.app-shell-toolbar-group--search {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.app-shell-toolbar-group--history {
+  flex: 0 0 auto;
+}
+
+.app-shell-toolbar-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.app-shell-toolbar-item--search-input {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.app-shell-toolbar-item--search-input .viewer-input--search {
+  width: 140px;
+  min-width: 120px;
+  max-width: 160px;
+}
+
+.app-shell-toolbar-item--zoom-level {
+  min-width: 40px;
+}
+
+.app-shell-toolbar-item--search-match-counter {
+  min-width: 100px;
+}
+
+.app-shell-toolbar .viewer-button {
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.app-shell-toolbar .viewer-button--compact {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+}
+
+.app-shell-toolbar .viewer-button--fit {
+  min-width: 66px;
+}
+
+.app-shell-toolbar .viewer-input {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.app-shell-toolbar .viewer-input--page {
+  width: 60px;
+}
+
+@media (max-width: 1180px) {
+  .app-shell-toolbar-item--search-input .viewer-input--search {
+    width: 130px;
+  }
+
+  .app-shell-toolbar-item--search-match-counter {
+    display: none;
+  }
+}
+
+@media (max-width: 799px) {
+  .app-shell-toolbar-item--search-input .viewer-input--search {
+    width: 120px;
+  }
+
+  .app-shell-toolbar-item--zoom-level {
+    display: none;
+  }
+}
+
+.app-shell-content-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-shell-sidebar {
+  display: flex;
+  flex: 0 0 52px;
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  height: 100%;
+  border-right: 1px solid #2f3748;
+  background: rgba(17, 22, 30, 0.94);
+  overflow: hidden;
+}
+
+.app-shell-sidebar--open {
+  flex-basis: 320px;
+  width: 320px;
+  min-width: 320px;
+  max-width: 320px;
+}
+
+.app-shell-sidebar-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 8px;
+  border-right: 1px solid #2f3748;
+}
+
+.app-shell-sidebar-toggle,
+.app-shell-sidebar-tab {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.app-shell-sidebar-tab--active {
+  outline: 1px solid #7fa6ff;
+  background: #33405a;
+}
+
+.app-shell-sidebar-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.app-shell-main-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-top: 1px solid #2f3748;
+  background: rgba(24, 29, 39, 0.95);
+  font-size: 12px;
+  color: #b9c2d7;
+}
+
+.app-shell-status-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

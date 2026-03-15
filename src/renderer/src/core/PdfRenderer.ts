@@ -26,6 +26,36 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 type PdfOutlineNode = NonNullable<Awaited<ReturnType<PDFDocumentProxy['getOutline']>>>[number]
 type PdfPageRef = Parameters<PDFDocumentProxy['getPageIndex']>[0]
+type Matrix2D = [number, number, number, number, number, number]
+
+const toMatrix2D = (value: number[]): Matrix2D | null => {
+  if (value.length !== 6) {
+    return null
+  }
+
+  const [a, b, c, d, e, f] = value
+  if (
+    !Number.isFinite(a) ||
+    !Number.isFinite(b) ||
+    !Number.isFinite(c) ||
+    !Number.isFinite(d) ||
+    !Number.isFinite(e) ||
+    !Number.isFinite(f)
+  ) {
+    return null
+  }
+
+  return [a, b, c, d, e, f]
+}
+
+const multiplyMatrices = (left: Matrix2D, right: Matrix2D): Matrix2D => [
+  left[0] * right[0] + left[2] * right[1],
+  left[1] * right[0] + left[3] * right[1],
+  left[0] * right[2] + left[2] * right[3],
+  left[1] * right[2] + left[3] * right[3],
+  left[0] * right[4] + left[2] * right[5] + left[4],
+  left[1] * right[4] + left[3] * right[5] + left[5]
+]
 
 const normalizeUnknownError = (error: unknown): string => {
   if (error instanceof Error) {
@@ -58,7 +88,7 @@ export class PdfRenderer implements PdfRendererApi {
     this.disposeDocument()
 
     try {
-      const loadingTask = getDocument({ data: bytes })
+      const loadingTask = getDocument({ data: bytes.slice() })
       const document = await loadingTask.promise
       this.document = document
       this.renderGeneration += 1
@@ -104,6 +134,11 @@ export class PdfRenderer implements PdfRendererApi {
       const pageNumber = input.pageIndex + 1
       const page = await this.document.getPage(pageNumber)
       const viewport = page.getViewport({ scale: input.scale })
+      const viewportMatrix = toMatrix2D(viewport.transform)
+      if (!viewportMatrix) {
+        return err('Unexpected PDF viewport transform')
+      }
+
       const textContent = await page.getTextContent()
       const boxes: PdfTextMatchBox[] = []
 
@@ -114,6 +149,7 @@ export class PdfRenderer implements PdfRendererApi {
 
         const textItem = item as {
           str: string
+          width: number
           height: number
           transform: number[]
         }
@@ -124,18 +160,22 @@ export class PdfRenderer implements PdfRendererApi {
           continue
         }
 
-        const transform = viewport.transform
-        const textTransform =
-          typeof DOMMatrix !== 'undefined'
-            ? new DOMMatrix(transform).multiply(new DOMMatrix(textItem.transform))
-            : null
-
-        if (!textTransform) {
+        const itemMatrix = toMatrix2D(textItem.transform)
+        if (!itemMatrix) {
           continue
         }
 
-        const fullWidth = Math.abs(textTransform.a)
-        const fullHeight = Math.max(Math.abs(textTransform.d), textItem.height * input.scale)
+        const textTransform = multiplyMatrices(viewportMatrix, itemMatrix)
+        const fullWidth = Math.max(
+          Math.abs(textItem.width * input.scale),
+          Math.abs(textTransform[0]),
+          1
+        )
+        const fullHeight = Math.max(
+          Math.abs(textItem.height * input.scale),
+          Math.hypot(textTransform[2], textTransform[3]),
+          8
+        )
         const unitWidth = fullWidth / sourceText.length
 
         let searchIndex = 0
@@ -145,9 +185,9 @@ export class PdfRenderer implements PdfRendererApi {
             break
           }
 
-          const x = textTransform.e + unitWidth * matchIndex
+          const x = textTransform[4] + unitWidth * matchIndex
           const width = unitWidth * query.length
-          const y = textTransform.f - fullHeight
+          const y = textTransform[5] - fullHeight
 
           boxes.push({
             x,
