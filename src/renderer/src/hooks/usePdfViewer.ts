@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent, RefObject, WheelEvent } from 'react'
+import type { MouseEvent, PointerEvent, RefObject, WheelEvent } from 'react'
 import { PdfDocument, type PdfDocumentApi } from '@renderer/core/PdfDocument'
 import { PdfRenderer } from '@renderer/core/PdfRenderer'
 import { useDocumentStore } from '@renderer/store/documentStore'
@@ -60,7 +60,10 @@ export interface UsePdfViewerResult extends ViewerBindings {
   viewportRef: RefObject<HTMLDivElement | null>
   documentApi: PdfDocumentApi
   applyDocumentBytes: (nextBytes: Uint8Array) => Promise<Result<void>>
-  resolveOverlayPoint: (event: PointerEvent<HTMLDivElement>) => PdfOverlayPoint | null
+  resolveOverlayPoint: (
+    event: PointerEvent<HTMLDivElement> | MouseEvent<HTMLDivElement>
+  ) => PdfOverlayPoint | null
+  resolveOverlayPointFromMouseEvent: (event: MouseEvent<HTMLDivElement>) => PdfOverlayPoint | null
   getPageSurfaceElement: (pageIndex: number) => HTMLElement | null
   openFile: () => Promise<void>
   zoomIn: () => void
@@ -157,7 +160,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
   }, [])
 
   const resolveOverlayPoint = useCallback(
-    (event: PointerEvent<HTMLDivElement>): PdfOverlayPoint | null => {
+    (event: PointerEvent<HTMLDivElement> | MouseEvent<HTMLDivElement>): PdfOverlayPoint | null => {
       const target = event.target
       if (!(target instanceof HTMLElement)) {
         return null
@@ -214,6 +217,13 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       }
     },
     [scale]
+  )
+
+  const resolveOverlayPointFromMouseEvent = useCallback(
+    (event: MouseEvent<HTMLDivElement>): PdfOverlayPoint | null => {
+      return resolveOverlayPoint(event)
+    },
+    [resolveOverlayPoint]
   )
 
   const applyDocumentBytes = useCallback(
@@ -729,6 +739,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       documentApi,
       applyDocumentBytes,
       resolveOverlayPoint,
+      resolveOverlayPointFromMouseEvent,
       getPageSurfaceElement,
       openFile,
       zoomIn,
@@ -789,6 +800,7 @@ export const usePdfViewer = (): UsePdfViewerResult => {
       pageCount,
       applyDocumentBytes,
       resolveOverlayPoint,
+      resolveOverlayPointFromMouseEvent,
       scale,
       searchQuery,
       setSearchQuery,

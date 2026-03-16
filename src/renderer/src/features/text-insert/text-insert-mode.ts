@@ -52,11 +52,6 @@ export class TextInsertMode {
       return
     }
 
-    const currentDraft = store.draft
-    if (currentDraft) {
-      void this.confirmDraft(currentDraft)
-    }
-
     const draftPoint: TextInsertPoint = {
       pageIndex: point.pageIndex,
       x: point.x,

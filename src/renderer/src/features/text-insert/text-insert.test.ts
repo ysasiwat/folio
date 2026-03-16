@@ -152,4 +152,32 @@ describe('TextInsertMode', () => {
     expect(useTextInsertStore.getState().draft).toBeNull()
     expect(executeCommand).not.toHaveBeenCalled()
   })
+
+  it('clicking new location starts a fresh draft without auto-committing old draft', () => {
+    const documentApi = createDocumentApiMock()
+    const applyDocumentBytes = vi.fn(async () => ok(undefined))
+    const executeCommand = vi.fn(async (command: AppCommand) => {
+      void command
+      return ok(undefined)
+    })
+
+    const mode = new TextInsertMode({
+      shell: { executeCommand },
+      documentApi,
+      applyDocumentBytes
+    })
+
+    mode.activate()
+    mode.onCanvasPointerDown({ pageIndex: 0, x: 10, y: 20, overlayLeft: 30, overlayTop: 40 })
+    mode.updateDraftText('First draft')
+
+    mode.onCanvasPointerDown({ pageIndex: 0, x: 50, y: 60, overlayLeft: 70, overlayTop: 80 })
+
+    const nextDraft = useTextInsertStore.getState().draft
+    expect(nextDraft).not.toBeNull()
+    expect(nextDraft?.text).toBe('')
+    expect(nextDraft?.x).toBe(50)
+    expect(nextDraft?.y).toBe(60)
+    expect(executeCommand).not.toHaveBeenCalled()
+  })
 })

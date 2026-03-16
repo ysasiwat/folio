@@ -17,7 +17,18 @@ import {
 import { err, ok, type Result } from '@renderer/types/result'
 
 const DEFAULT_FILE_NAME = 'Untitled'
-const DEFAULT_SIDEBAR_OPEN = true
+const DEFAULT_SIDEBAR_OPEN = false
+const TAB_GROUP_ORDER: string[] = [
+  'file',
+  'navigation',
+  'zoom',
+  'search',
+  'tools',
+  'text',
+  'page',
+  'utilities',
+  'history'
+]
 
 export class AppShell {
   private readonly history: History
@@ -114,7 +125,22 @@ export class AppShell {
   public getSnapshot(): ShellSnapshot {
     const toolbarItems = Array.from(this.toolbarItems.values()).sort((left, right) => {
       if (left.group !== right.group) {
-        return left.group.localeCompare(right.group)
+        const leftIndex = TAB_GROUP_ORDER.indexOf(left.group)
+        const rightIndex = TAB_GROUP_ORDER.indexOf(right.group)
+
+        if (leftIndex === -1 && rightIndex === -1) {
+          return left.group.localeCompare(right.group)
+        }
+
+        if (leftIndex === -1) {
+          return 1
+        }
+
+        if (rightIndex === -1) {
+          return -1
+        }
+
+        return leftIndex - rightIndex
       }
 
       return left.order - right.order

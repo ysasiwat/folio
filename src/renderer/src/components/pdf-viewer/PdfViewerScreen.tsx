@@ -5,7 +5,7 @@
  */
 
 import { memo } from 'react'
-import type { PointerEvent, ReactNode, RefObject, WheelEvent } from 'react'
+import type { MouseEvent, PointerEvent, ReactNode, RefObject, WheelEvent } from 'react'
 import { PdfViewport } from './PdfViewport'
 import { WelcomeScreen } from './WelcomeScreen'
 
@@ -19,6 +19,7 @@ export interface PdfViewerScreenProps {
   onScroll: () => void
   onWheel: (event: WheelEvent<HTMLDivElement>) => void
   onPointerDown?: (event: PointerEvent<HTMLDivElement>) => void
+  onClick?: (event: MouseEvent<HTMLDivElement>) => void
   overlays?: ReactNode
 }
 
@@ -32,6 +33,7 @@ export const PdfViewerScreen = memo(function PdfViewerScreen({
   onScroll,
   onWheel,
   onPointerDown,
+  onClick,
   overlays
 }: PdfViewerScreenProps): React.JSX.Element {
   return (
@@ -46,6 +48,7 @@ export const PdfViewerScreen = memo(function PdfViewerScreen({
             onScroll={onScroll}
             onWheel={onWheel}
             onPointerDown={onPointerDown}
+            onClick={onClick}
           />
         ) : (
           <div className="pdf-empty-viewport">

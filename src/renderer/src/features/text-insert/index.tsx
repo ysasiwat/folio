@@ -110,6 +110,7 @@ export const registerTextInsert = (deps: RegisterTextInsertDeps): TextInsertFeat
             <option value="Helvetica">Helvetica</option>
             <option value="Times-Roman">Times</option>
             <option value="Courier">Courier</option>
+            <option value="Times-Roman">Thai (Sarabun embed)</option>
           </select>
         )
       }

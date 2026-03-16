@@ -4,7 +4,7 @@
  * @author Y. Sasiwat <y.sasiwat@gmail.com>
  */
 
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AppShellFrame } from '@renderer/components/app-shell/AppShellFrame'
 import { PdfViewerScreen } from '@renderer/components/pdf-viewer/PdfViewerScreen'
@@ -21,6 +21,59 @@ import type { TextInsertMode } from '@renderer/features/text-insert/text-insert-
 
 const formatScale = (scale: number): string => `${Math.round(scale * 100)}%`
 
+const THUMBNAILS_PLACEHOLDER_ID = 'thumbnails-placeholder'
+
+const THUMBNAILS_ICON = (
+  <svg
+    className="app-shell-sidebar-icon"
+    viewBox="0 0 20 20"
+    width="20"
+    height="20"
+    aria-hidden="true"
+  >
+    <rect
+      x="3.5"
+      y="3.5"
+      width="5.5"
+      height="5.5"
+      rx="1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <rect
+      x="11"
+      y="3.5"
+      width="5.5"
+      height="5.5"
+      rx="1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <rect
+      x="3.5"
+      y="11"
+      width="5.5"
+      height="5.5"
+      rx="1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <rect
+      x="11"
+      y="11"
+      width="5.5"
+      height="5.5"
+      rx="1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+  </svg>
+)
+
 function App(): React.JSX.Element {
   const viewer = usePdfViewer()
   const viewerRef = useRef(viewer)
@@ -30,8 +83,6 @@ function App(): React.JSX.Element {
   const [, setShellVersion] = useReducer((value: number) => value + 1, 0)
 
   const textInsertDraft = useTextInsertStore((state) => state.draft)
-  const textInsertIsActive = useTextInsertStore((state) => state.isActive)
-  const [textInsertCommitId, setTextInsertCommitId] = useState(0)
 
   const setHistorySnapshot = useHistoryStore((state) => state.setSnapshot)
   const setSidebarOpen = useShellStore((state) => state.setSidebarOpen)
@@ -58,33 +109,8 @@ function App(): React.JSX.Element {
     setShellVersion()
   }
 
-  const handleToggleSidebar = (): void => {
-    const next = !shell.getSnapshot().sidebarOpen
-    shell.setSidebarOpen(next)
-    setShellVersion()
-  }
-
   const registerToolbarItems = (): void => {
     const items: ToolbarItemDef[] = [
-      {
-        id: 'bookmarks-toggle',
-        group: 'tools',
-        order: 1,
-        render: () => {
-          const isSidebarOpen = shell.getSnapshot().sidebarOpen
-
-          return (
-            <button
-              className="viewer-button"
-              type="button"
-              onClick={handleToggleSidebar}
-              aria-label={isSidebarOpen ? 'Hide Bookmarks' : 'Show Bookmarks'}
-            >
-              {isSidebarOpen ? 'Hide Bookmarks' : 'Show Bookmarks'}
-            </button>
-          )
-        }
-      },
       {
         id: 'file-open',
         group: 'file',
@@ -375,6 +401,46 @@ function App(): React.JSX.Element {
             Redo
           </button>
         )
+      },
+      {
+        id: 'page-insert-blank',
+        group: 'page',
+        order: 1,
+        render: () => (
+          <button className="viewer-button" type="button" disabled>
+            Insert Blank Page
+          </button>
+        )
+      },
+      {
+        id: 'page-split-pdf',
+        group: 'page',
+        order: 2,
+        render: () => (
+          <button className="viewer-button" type="button" disabled>
+            Split PDF
+          </button>
+        )
+      },
+      {
+        id: 'page-combine-pdf',
+        group: 'page',
+        order: 3,
+        render: () => (
+          <button className="viewer-button" type="button" disabled>
+            Combine PDFs
+          </button>
+        )
+      },
+      {
+        id: 'tools-coming-soon',
+        group: 'utilities',
+        order: 1,
+        render: () => (
+          <button className="viewer-button" type="button" disabled>
+            Future Tools
+          </button>
+        )
       }
     ]
 
@@ -410,6 +476,23 @@ function App(): React.JSX.Element {
       outlineItems: viewer.outlineItems,
       jumpToOutlineItem: viewer.jumpToOutlineItem
     })
+
+    const thumbnailsPanelResult = shell.addPanel({
+      id: THUMBNAILS_PLACEHOLDER_ID,
+      title: 'Thumbnails',
+      icon: THUMBNAILS_ICON,
+      order: 2,
+      render: () => (
+        <section className="pdf-outline-sidebar" aria-label="Page thumbnails">
+          <div className="pdf-outline-content">
+            <h2 className="pdf-outline-title">Thumbnails</h2>
+            <p className="pdf-outline-empty">Page thumbnails panel placeholder.</p>
+          </div>
+        </section>
+      )
+    })
+    void thumbnailsPanelResult
+
     const activateResult = shell.setActivePanel('bookmarks')
     void activateResult
 
@@ -435,19 +518,68 @@ function App(): React.JSX.Element {
   ])
 
   const handleSelectPanel = (panelId: string): void => {
-    const result = shell.setActivePanel(panelId)
-    if (result.ok) {
+    if (!panelId) {
+      shell.setSidebarOpen(false)
+      const clearResult = shell.setActivePanel(null)
+      void clearResult
       setShellVersion()
+      return
     }
+
+    const snapshot = shell.getSnapshot()
+    const shouldClose = snapshot.sidebarOpen && snapshot.activePanelId === panelId
+    if (shouldClose) {
+      shell.setSidebarOpen(false)
+      const clearResult = shell.setActivePanel(null)
+      void clearResult
+      setShellVersion()
+      return
+    }
+
+    shell.setSidebarOpen(true)
+    const result = shell.setActivePanel(panelId)
+    if (!result.ok) {
+      return
+    }
+
+    setShellVersion()
   }
 
   const handleViewerPointerDown = (event: import('react').PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) {
+      return
+    }
+
     const mode = textInsertModeRef.current
-    if (!mode || !textInsertIsActive) {
+    if (!mode) {
+      return
+    }
+
+    // If a draft is being edited, the pointer-down is the blur trigger — don't start a new draft
+    if (useTextInsertStore.getState().isEditing) {
       return
     }
 
     const overlayPoint = viewer.resolveOverlayPoint(event)
+    if (!overlayPoint) {
+      return
+    }
+
+    mode.onCanvasPointerDown(overlayPoint)
+    setShellVersion()
+  }
+
+  const handleViewerClick = (event: import('react').MouseEvent<HTMLDivElement>): void => {
+    const mode = textInsertModeRef.current
+    if (!mode) {
+      return
+    }
+
+    if (useTextInsertStore.getState().isEditing) {
+      return
+    }
+
+    const overlayPoint = viewer.resolveOverlayPointFromMouseEvent(event)
     if (!overlayPoint) {
       return
     }
@@ -465,26 +597,6 @@ function App(): React.JSX.Element {
     await mode.confirmCurrentDraft()
     setShellVersion()
   }
-
-  useEffect(() => {
-    if (!textInsertDraft) {
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      const mode = textInsertModeRef.current
-      if (!mode) {
-        return
-      }
-
-      void mode.confirmDraftIfCurrent(textInsertDraft)
-      setShellVersion()
-    }, 0)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [textInsertDraft, textInsertCommitId])
 
   const handleTextInsertCancel = (): void => {
     const mode = textInsertModeRef.current
@@ -521,7 +633,6 @@ function App(): React.JSX.Element {
         draft={textInsertDraft}
         onChangeText={handleTextInsertChange}
         onConfirm={() => {
-          setTextInsertCommitId((previous) => previous + 1)
           void handleTextInsertConfirm()
         }}
         onCancel={handleTextInsertCancel}
@@ -641,6 +752,7 @@ function App(): React.JSX.Element {
         onScroll={viewer.handleScroll}
         onWheel={viewer.handleWheel}
         onPointerDown={handleViewerPointerDown}
+        onClick={handleViewerClick}
         overlays={textInsertOverlay}
       />
     </AppShellFrame>

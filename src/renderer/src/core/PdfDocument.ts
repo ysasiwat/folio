@@ -7,6 +7,26 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { err, ok, type Result } from '@renderer/types/result'
 
+const UNICODE_FONT_PATH = '/fonts/Sarabun-Regular.ttf'
+
+let cachedUnicodeFontBytes: ArrayBuffer | null = null
+
+const loadUnicodeFontBytes = async (): Promise<ArrayBuffer> => {
+  if (cachedUnicodeFontBytes) {
+    return cachedUnicodeFontBytes
+  }
+
+  const response = await fetch(UNICODE_FONT_PATH)
+  if (!response.ok) {
+    throw new Error(`Failed to load Unicode font: ${response.status}`)
+  }
+
+  cachedUnicodeFontBytes = await response.arrayBuffer()
+  return cachedUnicodeFontBytes
+}
+
+const hasNonLatinChars = (text: string): boolean => /[^\x20-\x7E]/.test(text)
+
 export type TextInsertFontFamily = 'Helvetica' | 'Times-Roman' | 'Courier'
 
 export interface TextInsertStyle {
@@ -127,7 +147,14 @@ export class PdfDocument implements PdfDocumentApi {
     }
 
     try {
-      const font = await this.document.embedFont(toStandardFont(input.style.fontFamily))
+      let font
+      if (hasNonLatinChars(input.text)) {
+        const fontBytes = await loadUnicodeFontBytes()
+        font = await this.document.embedFont(fontBytes, { subset: true })
+      } else {
+        font = await this.document.embedFont(toStandardFont(input.style.fontFamily))
+      }
+
       const page = this.document.getPage(input.pageIndex)
 
       page.drawText(text, {

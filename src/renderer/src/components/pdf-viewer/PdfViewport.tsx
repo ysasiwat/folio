@@ -5,7 +5,7 @@
  */
 
 import { memo } from 'react'
-import type { PointerEvent, RefObject, WheelEvent } from 'react'
+import type { MouseEvent, PointerEvent, RefObject, WheelEvent } from 'react'
 
 export interface PdfViewportProps {
   viewportRef: RefObject<HTMLDivElement | null>
@@ -13,6 +13,7 @@ export interface PdfViewportProps {
   onScroll: () => void
   onWheel: (event: WheelEvent<HTMLDivElement>) => void
   onPointerDown?: (event: PointerEvent<HTMLDivElement>) => void
+  onClick?: (event: MouseEvent<HTMLDivElement>) => void
 }
 
 export const PdfViewport = memo(function PdfViewport({
@@ -20,7 +21,8 @@ export const PdfViewport = memo(function PdfViewport({
   canvasContainerRef,
   onScroll,
   onWheel,
-  onPointerDown
+  onPointerDown,
+  onClick
 }: PdfViewportProps): React.JSX.Element {
   return (
     <div
@@ -29,6 +31,7 @@ export const PdfViewport = memo(function PdfViewport({
       onScroll={onScroll}
       onWheel={onWheel}
       onPointerDown={onPointerDown}
+      onClick={onClick}
     >
       <div className="pdf-canvas-container" ref={canvasContainerRef} />
     </div>

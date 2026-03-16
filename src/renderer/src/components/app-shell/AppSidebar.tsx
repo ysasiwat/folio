@@ -22,6 +22,15 @@ export const AppSidebar = memo(function AppSidebar({
 }: AppSidebarProps): React.JSX.Element {
   const activePanel = panels.find((panel) => panel.id === activePanelId) ?? null
 
+  const handlePanelButtonClick = (panelId: string): void => {
+    if (sidebarOpen && activePanelId === panelId) {
+      onSelectPanel('')
+      return
+    }
+
+    onSelectPanel(panelId)
+  }
+
   return (
     <aside
       className={sidebarOpen ? 'app-shell-sidebar app-shell-sidebar--open' : 'app-shell-sidebar'}
@@ -43,7 +52,9 @@ export const AppSidebar = memo(function AppSidebar({
               role="tab"
               aria-selected={isActive}
               aria-controls={`panel-${panel.id}`}
-              onClick={() => onSelectPanel(panel.id)}
+              onClick={() => {
+                handlePanelButtonClick(panel.id)
+              }}
               title={panel.title}
             >
               {panel.icon}

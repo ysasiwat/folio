@@ -5,13 +5,23 @@
  */
 
 import type { JSX, RefObject } from 'react'
+import type { MouseEvent } from 'react'
 import type { PointerEvent } from 'react'
 import type { PdfDocumentApi } from '@renderer/core/PdfDocument'
 import type { PdfOutlineItem } from '@renderer/types/pdfViewer'
 import type { PdfOverlayPoint } from '@renderer/types/pdfViewer'
 import type { Result } from '@renderer/types/result'
 
-export type ToolbarGroup = 'file' | 'navigation' | 'zoom' | 'search' | 'history' | 'tools' | 'text'
+export type ToolbarGroup =
+  | 'file'
+  | 'navigation'
+  | 'zoom'
+  | 'search'
+  | 'history'
+  | 'tools'
+  | 'text'
+  | 'page'
+  | 'utilities'
 
 export interface ToolbarItemDef {
   id: string
@@ -23,7 +33,7 @@ export interface ToolbarItemDef {
 export interface PanelDef {
   id: string
   title: string
-  icon: string
+  icon: JSX.Element
   order: number
   render: () => JSX.Element
 }
@@ -99,7 +109,9 @@ export interface ViewerBindings {
   viewportRef: RefObject<HTMLDivElement | null>
   documentApi: PdfDocumentApi
   applyDocumentBytes: (nextBytes: Uint8Array) => Promise<Result<void>>
-  resolveOverlayPoint: (event: PointerEvent<HTMLDivElement>) => PdfOverlayPoint | null
+  resolveOverlayPoint: (
+    event: PointerEvent<HTMLDivElement> | MouseEvent<HTMLDivElement>
+  ) => PdfOverlayPoint | null
   handleScroll: () => void
   handleWheel: (event: import('react').WheelEvent<HTMLDivElement>) => void
   outlineItems: PdfOutlineItem[]
