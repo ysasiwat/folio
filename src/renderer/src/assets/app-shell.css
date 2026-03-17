@@ -149,26 +149,28 @@
 }
 
 .app-shell-sidebar-tab {
+  overflow: hidden;
+}
+
+.app-shell-sidebar-tab.viewer-button {
   width: 30px;
   min-width: 30px;
   height: 30px;
   padding: 0;
-  display: grid;
-  place-items: center;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  font-size: 0;
 }
 
 .app-shell-sidebar-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: #d8e0f2;
   display: block;
-  flex: 0 0 20px;
-  margin: 0 auto;
+  flex-shrink: 0;
+  margin: 0;
 }
 
 .app-shell-sidebar-tab--active {

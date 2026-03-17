@@ -10,6 +10,17 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { handleFileOpen } from './ipc/fileOpen'
 
+const SOFTWARE_GL_PLATFORMS = new Set(['linux'])
+
+function configureGraphicsCompatibility(): void {
+  if (SOFTWARE_GL_PLATFORMS.has(process.platform)) {
+    app.commandLine.appendSwitch('disable-gpu')
+    app.commandLine.appendSwitch('disable-gpu-compositing')
+    app.commandLine.appendSwitch('use-gl', 'swiftshader')
+    app.disableHardwareAcceleration()
+  }
+}
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -41,6 +52,8 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
+
+configureGraphicsCompatibility()
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.

@@ -11,6 +11,8 @@ import { ok } from '@renderer/types/result'
 import { TextInsertCommand } from '@renderer/features/text-insert/text-insert-command'
 import { TextInsertMode } from '@renderer/features/text-insert/text-insert-mode'
 import { useTextInsertStore } from '@renderer/features/text-insert/text-insert-store'
+import { AppShell } from '@renderer/core/AppShell'
+import { PdfDocument } from '@renderer/core/PdfDocument'
 
 const SAMPLE_SNAPSHOT = new Uint8Array([1, 2, 3])
 const SAMPLE_OUTPUT = new Uint8Array([4, 5, 6])
@@ -22,6 +24,55 @@ const createDocumentApiMock = (): PdfDocumentApi => ({
   insertText: vi.fn(async () => ok(undefined)),
   getBytes: vi.fn(async () => ok(SAMPLE_OUTPUT))
 })
+
+interface MockInsertPage {
+  getSize: () => { width: number; height: number }
+  drawText: ReturnType<typeof vi.fn>
+}
+
+interface MockInsertDocument {
+  getPageCount: () => number
+  getPage: (pageIndex: number) => MockInsertPage
+  embedFont: ReturnType<typeof vi.fn>
+  save: ReturnType<typeof vi.fn>
+  registerFontkit: ReturnType<typeof vi.fn>
+}
+
+const createPdfDocumentWithMockPage = (
+  width: number,
+  height: number
+): { pdfDocument: PdfDocument; drawText: ReturnType<typeof vi.fn> } => {
+  const drawText = vi.fn()
+  const page: MockInsertPage = {
+    getSize: () => ({ width, height }),
+    drawText
+  }
+
+  const internalDocument: MockInsertDocument = {
+    getPageCount: () => 1,
+    getPage: (pageIndex: number) => {
+      void pageIndex
+      return page
+    },
+    embedFont: vi.fn(async () => ({ id: 'mock-font' })),
+    save: vi.fn(async () => new Uint8Array([9, 9, 9])),
+    registerFontkit: vi.fn()
+  }
+
+  const pdfDocument = new PdfDocument()
+  const mutablePdfDocument = pdfDocument as unknown as {
+    document: MockInsertDocument | null
+    fontkitRegistered: boolean
+  }
+
+  mutablePdfDocument.document = internalDocument
+  mutablePdfDocument.fontkitRegistered = true
+
+  return {
+    pdfDocument,
+    drawText
+  }
+}
 
 describe('TextInsertCommand', () => {
   it('execute success updates bytes and undo restores snapshot bytes', async () => {
@@ -88,6 +139,84 @@ describe('TextInsertCommand', () => {
     expect(executeResult.ok).toBe(false)
     expect(documentApi.insertText).not.toHaveBeenCalled()
     expect(applyDocumentBytes).not.toHaveBeenCalled()
+  })
+
+  it('execute -> undo -> redo replay insertion through AppShell history', async () => {
+    const documentApi = createDocumentApiMock()
+    const applyDocumentBytes = vi.fn(async () => ok(undefined))
+
+    const command = new TextInsertCommand(
+      {
+        pageIndex: 0,
+        x: 10,
+        y: 20,
+        text: 'History replay',
+        style: {
+          fontFamily: 'Helvetica',
+          fontSize: 12,
+          colorHex: '#000000'
+        }
+      },
+      documentApi,
+      applyDocumentBytes
+    )
+
+    const shell = new AppShell({
+      getFileName: () => 'sample.pdf',
+      getCurrentPage: () => 0,
+      getPageCount: () => 1
+    })
+
+    const executeResult = await shell.executeCommand(command)
+    expect(executeResult.ok).toBe(true)
+
+    const undoResult = await shell.undo()
+    expect(undoResult.ok).toBe(true)
+    expect(documentApi.restoreBytes).toHaveBeenCalledTimes(1)
+
+    const redoResult = await shell.redo()
+    expect(redoResult.ok).toBe(true)
+    expect(documentApi.insertText).toHaveBeenCalledTimes(2)
+    expect(applyDocumentBytes).toHaveBeenCalledTimes(3)
+  })
+
+  it('normalizes insertion point for portrait and landscape pages', async () => {
+    const portrait = createPdfDocumentWithMockPage(595, 842)
+    const landscape = createPdfDocumentWithMockPage(842, 595)
+
+    const style = {
+      fontFamily: 'Helvetica' as const,
+      fontSize: 12,
+      colorHex: '#000000'
+    }
+
+    const portraitInsert = await portrait.pdfDocument.insertText({
+      pageIndex: 0,
+      x: 800,
+      y: -100,
+      text: 'portrait',
+      style
+    })
+    expect(portraitInsert.ok).toBe(true)
+
+    const portraitCall = portrait.drawText.mock.calls[0]
+    const portraitOptions = portraitCall?.[1] as { x: number; y: number }
+    expect(portraitOptions.x).toBe(595)
+    expect(portraitOptions.y).toBe(0)
+
+    const landscapeInsert = await landscape.pdfDocument.insertText({
+      pageIndex: 0,
+      x: -200,
+      y: 1000,
+      text: 'landscape',
+      style
+    })
+    expect(landscapeInsert.ok).toBe(true)
+
+    const landscapeCall = landscape.drawText.mock.calls[0]
+    const landscapeOptions = landscapeCall?.[1] as { x: number; y: number }
+    expect(landscapeOptions.x).toBe(0)
+    expect(landscapeOptions.y).toBe(595)
   })
 })
 

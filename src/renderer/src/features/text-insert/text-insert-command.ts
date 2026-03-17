@@ -8,10 +8,31 @@ import type { AppCommand, AppCommandContext } from '@renderer/types/appShell'
 import type { Result } from '@renderer/types/result'
 import { err } from '@renderer/types/result'
 import type { PdfDocumentApi, TextInsertCommandInput } from '@renderer/core/PdfDocument'
+import {
+  type TextInsertCommittedItem,
+  type TextInsertSessionSnapshot,
+  useTextInsertStore
+} from '@renderer/features/text-insert/text-insert-store'
 
 type ApplyDocumentBytes = (bytes: Uint8Array) => Promise<Result<void>>
 
 const normalizeWhitespace = (value: string): string => value.trim()
+
+const cloneSessionSnapshot = (snapshot: TextInsertSessionSnapshot): TextInsertSessionSnapshot => {
+  const cloneItem = (item: TextInsertCommittedItem): TextInsertCommittedItem => ({
+    ...item,
+    style: {
+      ...item.style
+    }
+  })
+
+  return {
+    anchorBytes: snapshot.anchorBytes ? snapshot.anchorBytes.slice() : null,
+    committedItems: snapshot.committedItems.map(cloneItem),
+    selectedItemId: snapshot.selectedItemId,
+    nextItemId: snapshot.nextItemId
+  }
+}
 
 export class TextInsertCommand implements AppCommand {
   public readonly id: string
@@ -24,16 +45,22 @@ export class TextInsertCommand implements AppCommand {
 
   private readonly applyDocumentBytes: ApplyDocumentBytes
 
+  private readonly nextSessionSnapshot: TextInsertSessionSnapshot | null
+
   private snapshot: Uint8Array | null = null
+
+  private previousSessionSnapshot: TextInsertSessionSnapshot | null = null
 
   public constructor(
     input: TextInsertCommandInput,
     documentApi: PdfDocumentApi,
-    applyDocumentBytes: ApplyDocumentBytes
+    applyDocumentBytes: ApplyDocumentBytes,
+    nextSessionSnapshot: TextInsertSessionSnapshot | null = null
   ) {
     this.input = input
     this.documentApi = documentApi
     this.applyDocumentBytes = applyDocumentBytes
+    this.nextSessionSnapshot = nextSessionSnapshot
     this.id = `text-insert-${input.pageIndex}-${Math.round(input.x)}-${Math.round(input.y)}-${Date.now()}`
     this.description = `Insert text on page ${input.pageIndex + 1}`
   }
@@ -55,6 +82,10 @@ export class TextInsertCommand implements AppCommand {
       this.snapshot = snapshotResult.value
     }
 
+    if (this.previousSessionSnapshot === null) {
+      this.previousSessionSnapshot = useTextInsertStore.getState().captureSessionSnapshot()
+    }
+
     const insertResult = await this.documentApi.insertText({
       ...this.input,
       text
@@ -68,7 +99,16 @@ export class TextInsertCommand implements AppCommand {
       return err(nextBytesResult.error)
     }
 
-    return this.applyDocumentBytes(nextBytesResult.value)
+    const applyResult = await this.applyDocumentBytes(nextBytesResult.value)
+    if (!applyResult.ok) {
+      return err(applyResult.error)
+    }
+
+    if (this.nextSessionSnapshot) {
+      useTextInsertStore.getState().applySessionSnapshot(this.nextSessionSnapshot)
+    }
+
+    return applyResult
   }
 
   public async undo(context: AppCommandContext): Promise<Result<void>> {
@@ -83,6 +123,80 @@ export class TextInsertCommand implements AppCommand {
       return err(restoreResult.error)
     }
 
-    return this.applyDocumentBytes(this.snapshot)
+    const applyResult = await this.applyDocumentBytes(this.snapshot)
+    if (!applyResult.ok) {
+      return err(applyResult.error)
+    }
+
+    if (this.previousSessionSnapshot) {
+      useTextInsertStore.getState().applySessionSnapshot(this.previousSessionSnapshot)
+    }
+
+    return applyResult
+  }
+}
+
+export interface TextInsertStateCommandInput {
+  id: string
+  description: string
+  previousBytes: Uint8Array
+  nextBytes: Uint8Array
+  previousSessionSnapshot: TextInsertSessionSnapshot
+  nextSessionSnapshot: TextInsertSessionSnapshot
+}
+
+export class TextInsertStateCommand implements AppCommand {
+  public readonly id: string
+
+  public readonly description: string
+
+  private readonly previousBytes: Uint8Array
+
+  private readonly nextBytes: Uint8Array
+
+  private readonly previousSessionSnapshot: TextInsertSessionSnapshot
+
+  private readonly nextSessionSnapshot: TextInsertSessionSnapshot
+
+  private readonly applyDocumentBytes: ApplyDocumentBytes
+
+  public constructor(input: TextInsertStateCommandInput, applyDocumentBytes: ApplyDocumentBytes) {
+    this.id = input.id
+    this.description = input.description
+    this.previousBytes = input.previousBytes.slice()
+    this.nextBytes = input.nextBytes.slice()
+    this.previousSessionSnapshot = cloneSessionSnapshot(input.previousSessionSnapshot)
+    this.nextSessionSnapshot = cloneSessionSnapshot(input.nextSessionSnapshot)
+    this.applyDocumentBytes = applyDocumentBytes
+  }
+
+  public async execute(context: AppCommandContext): Promise<Result<void>> {
+    void context
+
+    const applyResult = await this.applyDocumentBytes(this.nextBytes)
+    if (!applyResult.ok) {
+      return err(applyResult.error)
+    }
+
+    useTextInsertStore
+      .getState()
+      .applySessionSnapshot(cloneSessionSnapshot(this.nextSessionSnapshot))
+
+    return applyResult
+  }
+
+  public async undo(context: AppCommandContext): Promise<Result<void>> {
+    void context
+
+    const applyResult = await this.applyDocumentBytes(this.previousBytes)
+    if (!applyResult.ok) {
+      return err(applyResult.error)
+    }
+
+    useTextInsertStore
+      .getState()
+      .applySessionSnapshot(cloneSessionSnapshot(this.previousSessionSnapshot))
+
+    return applyResult
   }
 }

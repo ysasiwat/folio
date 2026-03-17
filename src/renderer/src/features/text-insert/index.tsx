@@ -14,6 +14,18 @@ import { useTextInsertStore } from '@renderer/features/text-insert/text-insert-s
 import type { ToolbarItemDef } from '@renderer/types/appShell'
 import type { Result } from '@renderer/types/result'
 
+const TEXT_FONT_OPTIONS = [
+  { value: 'Sarabun', label: 'Sarabun (Thai)' },
+  { value: 'Helvetica', label: 'Helvetica' },
+  { value: 'Times-Roman', label: 'Times' },
+  { value: 'Courier', label: 'Courier' }
+] as const
+
+type TextInsertFontOption = (typeof TEXT_FONT_OPTIONS)[number]['value']
+
+const isTextInsertFontOption = (value: string): value is TextInsertFontOption =>
+  TEXT_FONT_OPTIONS.some((option) => option.value === value)
+
 export interface RegisterTextInsertDeps {
   shell: AppShell
   applyDocumentBytes: (bytes: Uint8Array) => Promise<Result<void>>
@@ -100,17 +112,21 @@ export const registerTextInsert = (deps: RegisterTextInsertDeps): TextInsertFeat
             className="viewer-input"
             value={state.style.fontFamily}
             onChange={(event) => {
-              useTextInsertStore
-                .getState()
-                .setFontFamily(event.target.value as 'Helvetica' | 'Times-Roman' | 'Courier')
+              const selectedFont = event.target.value
+              if (!isTextInsertFontOption(selectedFont)) {
+                return
+              }
+
+              useTextInsertStore.getState().setFontFamily(selectedFont)
               onShellChanged()
             }}
             aria-label="Text font family"
           >
-            <option value="Helvetica">Helvetica</option>
-            <option value="Times-Roman">Times</option>
-            <option value="Courier">Courier</option>
-            <option value="Times-Roman">Thai (Sarabun embed)</option>
+            {TEXT_FONT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         )
       }
@@ -162,6 +178,73 @@ export const registerTextInsert = (deps: RegisterTextInsertDeps): TextInsertFeat
             }}
             aria-label="Text color"
           />
+        )
+      }
+    },
+    {
+      id: 'text-delete-selected',
+      group: 'text',
+      order: 4,
+      render: () => {
+        const state = useTextInsertStore.getState()
+        if (!state.isActive) {
+          return <></>
+        }
+
+        return (
+          <button
+            className="viewer-button"
+            type="button"
+            disabled={!state.selectedItemId}
+            onClick={() => {
+              void mode.deleteSelectedItem().then(() => {
+                onShellChanged()
+              })
+            }}
+            aria-label="Delete selected inserted text"
+            title="Delete selected inserted text"
+          >
+            Delete Text
+          </button>
+        )
+      }
+    },
+    {
+      id: 'text-move-selected',
+      group: 'text',
+      order: 5,
+      render: () => {
+        const state = useTextInsertStore.getState()
+        if (!state.isActive) {
+          return <></>
+        }
+
+        const isMoveMode = Boolean(state.moveTargetItemId)
+
+        return (
+          <button
+            className="viewer-button"
+            type="button"
+            disabled={!state.selectedItemId && !isMoveMode}
+            onClick={() => {
+              if (isMoveMode) {
+                mode.cancelMoveSelection()
+                onShellChanged()
+                return
+              }
+
+              mode.requestMoveSelectedItem()
+              onShellChanged()
+            }}
+            aria-label={isMoveMode ? 'Cancel move inserted text' : 'Move selected inserted text'}
+            title={
+              isMoveMode
+                ? 'Click to cancel move mode'
+                : 'Click then pick a new location on the page'
+            }
+          >
+            {isMoveMode ? 'Cancel Move' : 'Move Text'}
+          </button>
         )
       }
     }

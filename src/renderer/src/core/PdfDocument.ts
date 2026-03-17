@@ -4,6 +4,7 @@
  * @author Y. Sasiwat <y.sasiwat@gmail.com>
  */
 
+import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { err, ok, type Result } from '@renderer/types/result'
 
@@ -25,9 +26,9 @@ const loadUnicodeFontBytes = async (): Promise<ArrayBuffer> => {
   return cachedUnicodeFontBytes
 }
 
-const hasNonLatinChars = (text: string): boolean => /[^\x20-\x7E]/.test(text)
+const hasNonLatinChars = (text: string): boolean => /[^\x20-\x7E\r\n\t]/.test(text)
 
-export type TextInsertFontFamily = 'Helvetica' | 'Times-Roman' | 'Courier'
+export type TextInsertFontFamily = 'Helvetica' | 'Times-Roman' | 'Courier' | 'Sarabun'
 
 export interface TextInsertStyle {
   fontFamily: TextInsertFontFamily
@@ -82,7 +83,19 @@ const normalizeHexColor = (value: string): Result<{ r: number; g: number; b: num
   })
 }
 
-const toStandardFont = (fontFamily: TextInsertFontFamily): StandardFonts => {
+const clampToRange = (value: number, min: number, max: number): number => {
+  if (value < min) {
+    return min
+  }
+
+  if (value > max) {
+    return max
+  }
+
+  return value
+}
+
+const toStandardFont = (fontFamily: Exclude<TextInsertFontFamily, 'Sarabun'>): StandardFonts => {
   if (fontFamily === 'Times-Roman') {
     return StandardFonts.TimesRoman
   }
@@ -97,9 +110,21 @@ const toStandardFont = (fontFamily: TextInsertFontFamily): StandardFonts => {
 export class PdfDocument implements PdfDocumentApi {
   private document: PDFDocument | null = null
 
+  private fontkitRegistered = false
+
+  private ensureFontkitRegistered(): void {
+    if (!this.document || this.fontkitRegistered) {
+      return
+    }
+
+    this.document.registerFontkit(fontkit)
+    this.fontkitRegistered = true
+  }
+
   public async load(bytes: Uint8Array): Promise<Result<void>> {
     try {
       this.document = await PDFDocument.load(bytes)
+      this.fontkitRegistered = false
       return ok(undefined)
     } catch (error: unknown) {
       return err(normalizeUnknownError(error))
@@ -147,19 +172,32 @@ export class PdfDocument implements PdfDocumentApi {
     }
 
     try {
+      const page = this.document.getPage(input.pageIndex)
+      const pageSize = page.getSize()
+
+      const normalizedX = clampToRange(input.x, 0, pageSize.width)
+      const normalizedY = clampToRange(input.y, 0, pageSize.height)
+
       let font
-      if (hasNonLatinChars(input.text)) {
+      const shouldUseUnicodeFont =
+        input.style.fontFamily === 'Sarabun' || hasNonLatinChars(input.text)
+
+      if (shouldUseUnicodeFont) {
+        this.ensureFontkitRegistered()
         const fontBytes = await loadUnicodeFontBytes()
         font = await this.document.embedFont(fontBytes, { subset: true })
       } else {
-        font = await this.document.embedFont(toStandardFont(input.style.fontFamily))
+        const standardFontFamily: Exclude<TextInsertFontFamily, 'Sarabun'> =
+          input.style.fontFamily === 'Times-Roman' || input.style.fontFamily === 'Courier'
+            ? input.style.fontFamily
+            : 'Helvetica'
+
+        font = await this.document.embedFont(toStandardFont(standardFontFamily))
       }
 
-      const page = this.document.getPage(input.pageIndex)
-
       page.drawText(text, {
-        x: input.x,
-        y: input.y,
+        x: normalizedX,
+        y: normalizedY,
         size: input.style.fontSize,
         font,
         color: rgb(colorResult.value.r, colorResult.value.g, colorResult.value.b)

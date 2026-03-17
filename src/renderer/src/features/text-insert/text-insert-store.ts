@@ -8,7 +8,7 @@ import { create } from 'zustand'
 import type { TextInsertStyle } from '@renderer/core/PdfDocument'
 
 const DEFAULT_STYLE: TextInsertStyle = {
-  fontFamily: 'Helvetica',
+  fontFamily: 'Sarabun',
   fontSize: 12,
   colorHex: '#000000'
 }
@@ -41,6 +41,42 @@ const normalizeColorHex = (value: string): string => {
   return DEFAULT_STYLE.colorHex
 }
 
+const cloneBytes = (value: Uint8Array | null): Uint8Array | null => {
+  if (!value) {
+    return null
+  }
+
+  return value.slice()
+}
+
+const cloneStyle = (style: TextInsertStyle): TextInsertStyle => ({
+  ...style
+})
+
+const cloneCommittedItem = (item: TextInsertCommittedItem): TextInsertCommittedItem => ({
+  ...item,
+  style: cloneStyle(item.style)
+})
+
+const cloneCommittedItems = (items: TextInsertCommittedItem[]): TextInsertCommittedItem[] =>
+  items.map(cloneCommittedItem)
+
+export interface TextInsertCommittedItem {
+  id: string
+  pageIndex: number
+  x: number
+  y: number
+  text: string
+  style: TextInsertStyle
+}
+
+export interface TextInsertSessionSnapshot {
+  anchorBytes: Uint8Array | null
+  committedItems: TextInsertCommittedItem[]
+  selectedItemId: string | null
+  nextItemId: number
+}
+
 export interface TextInsertDraft {
   pageIndex: number
   x: number
@@ -49,6 +85,7 @@ export interface TextInsertDraft {
   overlayTop: number
   text: string
   style: TextInsertStyle
+  sourceItemId: string | null
 }
 
 export interface TextInsertPoint {
@@ -64,15 +101,33 @@ export interface TextInsertModeState {
   isEditing: boolean
   draft: TextInsertDraft | null
   style: TextInsertStyle
+  committedItems: TextInsertCommittedItem[]
+  selectedItemId: string | null
+  anchorBytes: Uint8Array | null
+  nextItemId: number
+  moveTargetItemId: string | null
   activate: () => void
   deactivate: () => void
   beginDraft: (point: TextInsertPoint) => void
+  beginDraftFromCommittedItem: (itemId: string, overlayLeft: number, overlayTop: number) => void
   updateDraftText: (text: string) => void
   confirmDraft: () => TextInsertDraft | null
   cancelDraft: () => void
+  selectCommittedItem: (itemId: string | null) => void
   setFontFamily: (fontFamily: TextInsertStyle['fontFamily']) => void
   setFontSize: (fontSize: number) => void
   setColorHex: (colorHex: string) => void
+  captureSessionSnapshot: () => TextInsertSessionSnapshot
+  applySessionSnapshot: (snapshot: TextInsertSessionSnapshot) => void
+  setAnchorBytes: (bytes: Uint8Array) => void
+  clearAnchorBytes: () => void
+  appendCommittedItem: (item: Omit<TextInsertCommittedItem, 'id'>) => TextInsertCommittedItem
+  replaceCommittedItem: (
+    itemId: string,
+    patch: Partial<Omit<TextInsertCommittedItem, 'id'>>
+  ) => void
+  removeCommittedItem: (itemId: string) => void
+  setMoveTargetItem: (itemId: string | null) => void
 }
 
 export const useTextInsertStore = create<TextInsertModeState>()((set, get) => ({
@@ -80,17 +135,30 @@ export const useTextInsertStore = create<TextInsertModeState>()((set, get) => ({
   isEditing: false,
   draft: null,
   style: DEFAULT_STYLE,
+  committedItems: [],
+  selectedItemId: null,
+  anchorBytes: null,
+  nextItemId: 1,
+  moveTargetItemId: null,
   activate: () => {
     set({ isActive: true })
   },
   deactivate: () => {
-    set({ isActive: false, isEditing: false, draft: null })
+    set({
+      isActive: false,
+      isEditing: false,
+      draft: null,
+      selectedItemId: null,
+      moveTargetItemId: null
+    })
   },
   beginDraft: (point) => {
     const style = get().style
 
     set({
       isEditing: true,
+      selectedItemId: null,
+      moveTargetItemId: null,
       draft: {
         pageIndex: point.pageIndex,
         x: point.x,
@@ -98,7 +166,31 @@ export const useTextInsertStore = create<TextInsertModeState>()((set, get) => ({
         overlayLeft: point.overlayLeft,
         overlayTop: point.overlayTop,
         text: '',
-        style
+        style,
+        sourceItemId: null
+      }
+    })
+  },
+  beginDraftFromCommittedItem: (itemId, overlayLeft, overlayTop) => {
+    const item = get().committedItems.find((entry) => entry.id === itemId)
+    if (!item) {
+      return
+    }
+
+    set({
+      isEditing: true,
+      selectedItemId: itemId,
+      moveTargetItemId: null,
+      style: cloneStyle(item.style),
+      draft: {
+        pageIndex: item.pageIndex,
+        x: item.x,
+        y: item.y,
+        overlayLeft,
+        overlayTop,
+        text: item.text,
+        style: cloneStyle(item.style),
+        sourceItemId: itemId
       }
     })
   },
@@ -130,6 +222,19 @@ export const useTextInsertStore = create<TextInsertModeState>()((set, get) => ({
       isEditing: false,
       draft: null
     })
+  },
+  selectCommittedItem: (itemId) => {
+    if (itemId === null) {
+      set({ selectedItemId: null })
+      return
+    }
+
+    const exists = get().committedItems.some((item) => item.id === itemId)
+    if (!exists) {
+      return
+    }
+
+    set({ selectedItemId: itemId })
   },
   setFontFamily: (fontFamily) => {
     const nextStyle: TextInsertStyle = {
@@ -181,5 +286,93 @@ export const useTextInsertStore = create<TextInsertModeState>()((set, get) => ({
           }
         : null
     })
+  },
+  captureSessionSnapshot: () => {
+    const state = get()
+
+    return {
+      anchorBytes: cloneBytes(state.anchorBytes),
+      committedItems: cloneCommittedItems(state.committedItems),
+      selectedItemId: state.selectedItemId,
+      nextItemId: state.nextItemId
+    }
+  },
+  applySessionSnapshot: (snapshot) => {
+    set({
+      anchorBytes: cloneBytes(snapshot.anchorBytes),
+      committedItems: cloneCommittedItems(snapshot.committedItems),
+      selectedItemId: snapshot.selectedItemId,
+      nextItemId: snapshot.nextItemId,
+      moveTargetItemId: null,
+      draft: null,
+      isEditing: false
+    })
+  },
+  setAnchorBytes: (bytes) => {
+    set({ anchorBytes: bytes.slice() })
+  },
+  clearAnchorBytes: () => {
+    set({ anchorBytes: null })
+  },
+  appendCommittedItem: (item) => {
+    const state = get()
+    const id = `text-item-${state.nextItemId}`
+    const nextItem: TextInsertCommittedItem = {
+      ...item,
+      id,
+      style: cloneStyle(item.style)
+    }
+
+    set({
+      committedItems: [...state.committedItems, nextItem],
+      selectedItemId: id,
+      nextItemId: state.nextItemId + 1,
+      moveTargetItemId: null
+    })
+
+    return nextItem
+  },
+  replaceCommittedItem: (itemId, patch) => {
+    const state = get()
+
+    const nextItems = state.committedItems.map((item) => {
+      if (item.id !== itemId) {
+        return item
+      }
+
+      return {
+        ...item,
+        ...patch,
+        style: patch.style ? cloneStyle(patch.style) : item.style
+      }
+    })
+
+    set({
+      committedItems: nextItems,
+      selectedItemId: state.selectedItemId === itemId ? itemId : state.selectedItemId
+    })
+  },
+  removeCommittedItem: (itemId) => {
+    const state = get()
+    const nextItems = state.committedItems.filter((item) => item.id !== itemId)
+
+    set({
+      committedItems: nextItems,
+      selectedItemId: state.selectedItemId === itemId ? null : state.selectedItemId,
+      moveTargetItemId: state.moveTargetItemId === itemId ? null : state.moveTargetItemId
+    })
+  },
+  setMoveTargetItem: (itemId) => {
+    if (itemId === null) {
+      set({ moveTargetItemId: null })
+      return
+    }
+
+    const exists = get().committedItems.some((item) => item.id === itemId)
+    if (!exists) {
+      return
+    }
+
+    set({ moveTargetItemId: itemId, selectedItemId: itemId })
   }
 }))

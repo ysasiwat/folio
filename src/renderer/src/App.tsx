@@ -83,6 +83,9 @@ function App(): React.JSX.Element {
   const [, setShellVersion] = useReducer((value: number) => value + 1, 0)
 
   const textInsertDraft = useTextInsertStore((state) => state.draft)
+  const textInsertCommittedItems = useTextInsertStore((state) => state.committedItems)
+  const textInsertSelectedItemId = useTextInsertStore((state) => state.selectedItemId)
+  const textInsertMoveTargetItemId = useTextInsertStore((state) => state.moveTargetItemId)
 
   const setHistorySnapshot = useHistoryStore((state) => state.setSnapshot)
   const setSidebarOpen = useShellStore((state) => state.setSidebarOpen)
@@ -631,11 +634,34 @@ function App(): React.JSX.Element {
     return createPortal(
       <TextInsertOverlay
         draft={textInsertDraft}
+        committedItems={textInsertCommittedItems.filter(
+          (item) => item.pageIndex === textInsertDraft.pageIndex
+        )}
+        selectedItemId={textInsertSelectedItemId}
+        moveTargetItemId={textInsertMoveTargetItemId}
         onChangeText={handleTextInsertChange}
         onConfirm={() => {
           void handleTextInsertConfirm()
         }}
         onCancel={handleTextInsertCancel}
+        onSelectCommittedItem={(itemId) => {
+          const mode = textInsertModeRef.current
+          if (!mode) {
+            return
+          }
+
+          mode.selectCommittedItem(itemId)
+          setShellVersion()
+        }}
+        onBeginEditCommittedItem={(itemId, overlayLeft, overlayTop) => {
+          const mode = textInsertModeRef.current
+          if (!mode) {
+            return
+          }
+
+          mode.beginEditCommittedItem(itemId, overlayLeft, overlayTop)
+          setShellVersion()
+        }}
       />,
       pageSurface
     )
